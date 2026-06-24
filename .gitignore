@@ -1,0 +1,20 @@
+# Node
+node_modules/
+backend/node_modules/
+worker/node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Local runtime state (POC stores everything here when run outside Docker)
+data/
+reports/
+
+# Env (keep .env.example; ignore real secrets)
+.env
+frontend/.env
+frontend/.env.local
+worker/.env.worker
+
+# Editor / OS
+.DS_Store
+*.log

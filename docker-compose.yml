@@ -1,0 +1,24 @@
+services:
+
+  # ── Backend (Express API + React static) ────────────────────────────────
+  api:
+    build:
+      context: .                  # project root: needs frontend/, backend/, common/
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATA_DIR:     /app/data
+      SCRIPTS_DIR:  /app/scripts
+      REPORTS_DIR:  /app/reports
+      SECRET_KEY:   ${SECRET_KEY}
+    volumes:
+      # HOST-folder bind mounts (NOT named volumes) so the native Windows worker
+      # shares the exact same files. Set these host paths in .env.
+      - ${HOST_SCRIPTS_DIR}:/app/scripts:ro   # task scripts (read-only)
+      - ${HOST_DATA_DIR}:/app/data            # shared state (queue + records)
+      - ${HOST_REPORTS_DIR}:/app/reports      # shared reports
+
+# No `volumes:` block — there are no named Docker volumes; data and reports are
+# host folders managed by the Windows host (and by the native worker).

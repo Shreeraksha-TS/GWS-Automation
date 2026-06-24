@@ -1,0 +1,16 @@
+{
+    "name": "Search Wikipedia",
+    "description": "Searches Wikipedia and screenshots the result.",
+    "script_path": "search_wiki/task.ts",
+    "tags": ["smoke", "browser"],
+    "params": [
+        {
+            "name": "TERM",
+            "label": "Search term",
+            "type": "text",
+            "required": true,
+            "placeholder": "Playwright"
+        }
+    ]
+}
+

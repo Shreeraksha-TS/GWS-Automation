@@ -1,0 +1,15 @@
+{
+  "name": "Open Google",
+  "description": "Opens https://www.google.com in Chromium, verifies the page title contains 'Google', and captures a screenshot.",
+  "script_path": "open_google/task.ts",
+  "tags": ["smoke", "browser", "sample"],
+  "params": [
+    {
+      "name": "URL",
+      "label": "URL to open",
+      "type": "url",
+      "required": true,
+      "placeholder": "https://www.google.com"
+    }
+  ]
+}

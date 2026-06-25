@@ -1,0 +1,11 @@
+{
+  "name": "Multi-Step Flow",
+  "description": "Navigates a multi-step flow by clicking Next/Continue buttons. Takes a screenshot after each step and saves a final screenshot on completion.",
+  "script_path": "multi_step_flow/task.ts",
+  "tags": [
+    "multi-step",
+    "browser",
+    "automation"
+  ],
+  "params": []
+}

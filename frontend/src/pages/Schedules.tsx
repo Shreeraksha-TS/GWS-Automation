@@ -13,19 +13,29 @@ export function Schedules() {
   // Add-schedule form state
   const [taskId, setTaskId] = useState('');
   const [cron, setCron] = useState('0 9 * * 1-5');
-  const [paramsText, setParamsText] = useState('{}');
-  const [paramValues, setParamValues] = useState<Record<string, string>>({});
+  // Same key->value editor as the Run dialog: declared params become locked rows,
+  // a task with no declared params gets a single free-form editable row.
+  const [pairs, setPairs] = useState<{ key: string; value: string }[]>([{ key: '', value: '' }]);
   const [busy, setBusy] = useState(false);
 
   const selectedTask = tasks.find((t) => t.id === taskId);
   const fields = selectedTask?.params ?? [];
   const hasFields = fields.length > 0;
+  const requiredKeys = fields.filter((f) => f.required).map((f) => f.name);
 
-  // When the selected task changes, reset its field values (pre-filling any defaults).
+  // When the selected task changes, reset rows (pre-filling declared params + defaults).
   useEffect(() => {
-    setParamValues(Object.fromEntries(fields.map((f) => [f.name, f.default ?? ''])));
+    setPairs(
+      hasFields
+        ? fields.map((f) => ({ key: f.name, value: f.default ?? '' }))
+        : [{ key: '', value: '' }]
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
+  }, [taskId, tasks]);
+
+  function updatePair(i: number, patch: Partial<{ key: string; value: string }>) {
+    setPairs((ps) => ps.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+  }
 
   function flash(kind: 'ok' | 'err', msg: string) {
     setToast({ kind, msg });
@@ -50,36 +60,38 @@ export function Schedules() {
 
   const taskName = (id: string) => tasks.find((t) => t.id === id)?.name ?? id.slice(0, 8);
 
+  // Build robot_params from the key->value rows, enforcing required declared params
+  // so the automated run always has its assigned data. Returns null (and flashes) on error.
+  function buildParams(): Record<string, unknown> | null {
+    const params: Record<string, unknown> = {};
+    for (const p of pairs) {
+      const key = p.key.trim();
+      if (!key && !p.value.trim()) continue;              // skip fully-blank rows
+      if (!key) { flash('err', 'Each parameter needs a key.'); return null; }
+      if (key in params) { flash('err', `Duplicate key "${key}".`); return null; }
+      const f = fields.find((x) => x.name === key);
+      params[key] = f?.type === 'number' ? Number(p.value) : p.value;
+    }
+    for (const f of fields) {
+      if (f.required && !String(params[f.name] ?? '').trim()) {
+        flash('err', `"${f.label ?? f.name}" is required.`);
+        return null;
+      }
+    }
+    return params;
+  }
+
   async function create() {
     if (!taskId) return flash('err', 'Pick a task first');
     if (!isLikelyValidCron(cron)) return flash('err', 'Cron must have 5 fields');
 
-    let robot_params: Record<string, unknown>;
-    if (hasFields) {
-      // Build params from the task's declared fields, enforcing required ones so the
-      // automated run always has its assigned data.
-      const missing = fields.find((f) => f.required && !paramValues[f.name]?.trim());
-      if (missing) return flash('err', `${missing.label ?? missing.name} is required`);
-      robot_params = {};
-      for (const f of fields) {
-        const v = paramValues[f.name]?.trim();
-        if (!v) continue;
-        robot_params[f.name] = f.type === 'number' ? Number(v) : v;
-      }
-    } else {
-      try {
-        robot_params = JSON.parse(paramsText || '{}');
-        if (typeof robot_params !== 'object' || Array.isArray(robot_params)) throw new Error();
-      } catch {
-        return flash('err', 'Params must be a JSON object');
-      }
-    }
+    const robot_params = buildParams();
+    if (!robot_params) return;
 
     setBusy(true);
     try {
       await schedulesApi.create({ task_id: taskId, cron_expression: cron, robot_params });
       flash('ok', 'Schedule created');
-      setParamsText('{}');
       load();
     } catch (e: any) {
       flash('err', e?.response?.data?.detail ?? 'Create failed');
@@ -126,37 +138,43 @@ export function Schedules() {
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
-            {hasFields ? (
-              <div className="mt-4 space-y-3">
-                {fields.map((f) => (
-                  <div key={f.name}>
-                    <label className="block text-sm text-slate-600 mb-1">
-                      {f.label ?? f.name}
-                      {f.required && <span className="text-red-500 ml-0.5">*</span>}
-                    </label>
-                    <input
-                      type={f.type === 'number' ? 'number' : 'text'}
-                      value={paramValues[f.name] ?? ''}
-                      placeholder={f.placeholder}
-                      onChange={(e) =>
-                        setParamValues((v) => ({ ...v, [f.name]: e.target.value }))
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    />
-                  </div>
-                ))}
+            <div className="mt-4">
+              <label className="block text-sm text-slate-600 mb-2">Parameters (key &rarr; value)</label>
+              <div className="space-y-2">
+                {pairs.map((p, i) => {
+                  const isRequired = requiredKeys.includes(p.key);
+                  return (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        value={p.key}
+                        readOnly={hasFields}
+                        onChange={(e) => updatePair(i, { key: e.target.value })}
+                        placeholder="key (e.g. url)"
+                        className={`w-1/3 rounded-lg border px-2 py-1.5 font-mono text-xs ${
+                          hasFields
+                            ? 'border-slate-200 bg-slate-50 text-slate-600'
+                            : 'border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-400'
+                        }`}
+                      />
+                      <span className="text-slate-400 text-xs">&rarr;</span>
+                      <input
+                        value={p.value}
+                        onChange={(e) => updatePair(i, { value: e.target.value })}
+                        placeholder={isRequired ? 'value (required)' : 'value'}
+                        className={`flex-1 rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+                          isRequired && !p.value.trim() ? 'border-red-300' : 'border-slate-300'
+                        }`}
+                      />
+                    </div>
+                  );
+                })}
               </div>
-            ) : (
-              <>
-                <label className="block text-sm text-slate-600 mb-1 mt-4">Robot params (JSON)</label>
-                <textarea
-                  value={paramsText}
-                  onChange={(e) => setParamsText(e.target.value)}
-                  rows={2}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
-              </>
-            )}
+              {requiredKeys.length > 0 ? (
+                <p className="text-xs text-slate-400 mt-1">Required: {requiredKeys.join(', ')}</p>
+              ) : (
+                <p className="text-xs text-slate-400 mt-1">Add key-value pairs, or leave empty to run with none.</p>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">Cron expression</label>

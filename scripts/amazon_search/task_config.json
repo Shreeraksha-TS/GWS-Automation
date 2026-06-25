@@ -1,0 +1,9 @@
+{
+  "name": "Amazon Search",
+  "description": null,
+  "script_path": "amazon_search/task.ts",
+  "tags": [
+    "product"
+  ],
+  "params": []
+}

@@ -15,6 +15,17 @@ export const TaskCreate = z.object({
   script_path: z.string(),
   tags: z.array(z.string()).optional().default([]),
   params: z.array(TaskParamSchema).optional().default([]),
+  // Optional uploaded .ts source. When present it's written to the script file
+  // instead of generating a scaffold. (Sent as text from the browser.)
+  script_content: z.string().optional(),
+});
+
+// Editing an existing task: script_path is immutable, so it's not accepted here.
+export const TaskUpdate = z.object({
+  name: z.string(),
+  description: z.string().nullish(),
+  tags: z.array(z.string()).optional().default([]),
+  params: z.array(TaskParamSchema).optional().default([]),
 });
 
 export const TriggerRequest = z.object({

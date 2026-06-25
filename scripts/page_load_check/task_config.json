@@ -1,0 +1,11 @@
+{
+  "name": "Page Load Check",
+  "description": "Measures page load time (DNS, TTFB, DOM, full load). Warns if load exceeds threshold. Takes a screenshot on completion.",
+  "script_path": "page_load_check/task.ts",
+  "tags": [
+    "smoke",
+    "performance",
+    "screenshot"
+  ],
+  "params": []
+}

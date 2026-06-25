@@ -1,0 +1,12 @@
+{
+  "name": "Smart Capture Screenshot",
+  "description": "Opens a given URL, optionally performs a search using the term parameter, scrolls the page, highlights elements, and captures a screenshot.",
+  "script_path": "smart_capture/task.ts",
+  "tags": [
+    "automation",
+    "screenshot",
+    "browser",
+    "dynamic"
+  ],
+  "params": []
+}

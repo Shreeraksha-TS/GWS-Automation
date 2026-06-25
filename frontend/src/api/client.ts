@@ -6,9 +6,11 @@ const api = axios.create({ baseURL: BASE });
 
 export const tasksApi = {
   list: ()                           => api.get('/api/tasks'),
+  available: ()                      => api.get('/api/tasks/available'),
   get:  (id: string)                 => api.get(`/api/tasks/${id}`),
   run:  (id: string, params = {})    => api.post(`/api/tasks/${id}/run`, { robot_params: params }),
   create: (data: object)             => api.post('/api/tasks', data),
+  update: (id: string, data: object) => api.patch(`/api/tasks/${id}`, data),
   delete: (id: string)               => api.delete(`/api/tasks/${id}`),
 };
 

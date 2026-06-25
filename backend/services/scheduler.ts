@@ -1,17 +1,15 @@
 import cron, { ScheduledTask } from "node-cron";
-import * as store from "../../common/store.js";
-import { newExecution } from "../../common/records.js";
-import { enqueue } from "../../common/jobqueue.js";
+import cronParser from "cron-parser";
+import { executionsRepo, schedulesRepo } from "../../common/repo.js";
 import type { Schedule } from "../../common/types.js";
 
 const jobs = new Map<string, ScheduledTask>();
 
-function runScheduled(taskId: string, params: Record<string, unknown>, scheduleId: string): void {
-  const execution = newExecution(taskId, "schedule", params);
-  store.saveEntity(store.EXEC_DIR, execution.id, execution);
-  enqueue(execution.id);
-  const sched = store.getEntity<Schedule>(store.SCHED_DIR, scheduleId);
-  if (sched) { sched.last_run_at = store.utcnowIso(); store.saveEntity(store.SCHED_DIR, scheduleId, sched); }
+async function runScheduled(sched: Schedule): Promise<void> {
+  // Inserting a QUEUED execution enqueues it; params are copied onto the run.
+  await executionsRepo.create(sched.task_id, "schedule", sched.robot_params ?? {}, sched.id);
+  const nextRunAt = cronParser.parseExpression(sched.cron_expression, { tz: "UTC" }).next().toISOString();
+  await schedulesRepo.recordRun(sched.id, nextRunAt);
 }
 
 export function addSchedule(sched: Schedule): void {
@@ -19,7 +17,7 @@ export function addSchedule(sched: Schedule): void {
   jobs.get(sched.id)?.stop();
   const task = cron.schedule(
     sched.cron_expression,
-    () => runScheduled(sched.task_id, sched.robot_params ?? {}, sched.id),
+    () => { runScheduled(sched).catch((e) => console.error(`[SCHED] ${sched.id} failed:`, e)); },
     { timezone: "UTC" },
   );
   jobs.set(sched.id, task);
@@ -30,6 +28,6 @@ export function removeSchedule(scheduleId: string): void {
   jobs.delete(scheduleId);
 }
 
-export function loadSchedules(): void {
-  for (const s of store.listEntities<Schedule>(store.SCHED_DIR)) if (s.is_active) addSchedule(s);
+export async function loadSchedules(): Promise<void> {
+  for (const s of await schedulesRepo.listActive()) addSchedule(s);
 }

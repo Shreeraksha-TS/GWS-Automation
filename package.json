@@ -1,0 +1,13 @@
+{
+  "name": "automation-framework",
+  "private": true,
+  "type": "module",
+  "description": "Root manifest: hoists shared deps (mssql) so common/ resolves them for both backend and worker.",
+  "dependencies": {
+    "mssql": "^12.6.0",
+    "playwright": "^1.60.0"
+  },
+  "devDependencies": {
+    "@types/mssql": "^12.3.0"
+  }
+}

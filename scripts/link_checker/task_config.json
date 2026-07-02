@@ -1,0 +1,25 @@
+{
+  "name": "Link Health Checker",
+  "description": "Scans a page for all links and checks each one's HTTP status. Reports working vs broken links and screenshots the page.",
+  "script_path": "link_checker/task.ts",
+  "tags": [
+    "smoke",
+    "links",
+    "qa"
+  ],
+  "params": [
+    {
+      "name": "url",
+      "label": "url",
+      "type": "url",
+      "required": false
+    },
+    {
+      "name": "maxLinks",
+      "label": "maxLinks",
+      "type": "url",
+      "required": false,
+      "default": "15"
+    }
+  ]
+}

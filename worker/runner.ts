@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium, Browser } from "playwright";
-import { logsRepo, artifactsRepo } from "../common/repo.js";
+import { logsRepo, artifactsRepo, stepsRepo } from "../common/repo.js";
 import type { Task, TaskContext } from "../common/types.js";
 
 const SCRIPTS_DIR = process.env.SCRIPTS_DIR ?? path.resolve("scripts");
@@ -29,6 +29,22 @@ export async function runTask(
     pending.push(logsRepo.append(executionId, level, message).catch(() => { /* best effort */ }));
   };
 
+  // Record each step's status + timing to dbo.execution_steps (best-effort, async).
+  let stepSeq = 0;
+  const recordStep = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
+    const seq = ++stepSeq;
+    const startedAt = new Date().toISOString();
+    const t0 = Date.now();
+    try {
+      const out = await fn();
+      pending.push(stepsRepo.add(executionId, seq, name, "PASSED", startedAt, new Date().toISOString(), Date.now() - t0, null).catch(() => {}));
+      return out;
+    } catch (e: any) {
+      pending.push(stepsRepo.add(executionId, seq, name, "FAILED", startedAt, new Date().toISOString(), Date.now() - t0, e?.message ?? String(e)).catch(() => {}));
+      throw e;
+    }
+  };
+
   const started = Date.now();
   let browser: Browser | null = null;
   let passed = false;
@@ -53,8 +69,10 @@ export async function runTask(
       const page = await context.newPage();
       const step = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
         log("KEYWORD", `  > ${name}`);
-        try { return await fn(); }
-        catch (e: any) { log("ERROR", `  x ${name} [FAIL] -- ${e?.message ?? e}`); throw e; }
+        return recordStep(name, async () => {
+          try { return await fn(); }
+          catch (e: any) { log("ERROR", `  x ${name} [FAIL] -- ${e?.message ?? e}`); throw e; }
+        });
       };
       await frameworkRun({ page, params, outputDir, log, step } as TaskContext);
     } else {
@@ -66,7 +84,8 @@ export async function runTask(
       console.log = (...a: unknown[]) => { log("INFO", a.map(String).join(" ")); origLog(...a); };
       console.error = (...a: unknown[]) => { log("ERROR", a.map(String).join(" ")); origErr(...a); };
       try {
-        await standaloneRun!(params);
+        // Standalone scripts don't declare steps, so record the whole run as one step.
+        await recordStep(`Run ${task.name}`, () => standaloneRun!(params));
       } finally {
         console.log = origLog; console.error = origErr;
       }
@@ -114,6 +133,10 @@ async function writeReport(
   const logs = await logsRepo.read(executionId);
   const rows = logs.map(l =>
     `<tr><td>${l.timestamp}</td><td>${l.level}</td><td>${escapeHtml(String(l.message))}</td></tr>`).join("");
+  const steps = await stepsRepo.list(executionId);
+  const stepRows = steps.map(s =>
+    `<tr><td>${s.seq}</td><td>${escapeHtml(s.name)}</td><td>${s.status}</td><td>${s.duration_ms ?? ""} ms</td>` +
+    `<td>${s.error_message ? escapeHtml(s.error_message) : ""}</td></tr>`).join("");
   const shots = fs.readdirSync(outputDir)
     .filter(f => /\.(png|jpe?g)$/i.test(f))
     .map(f => `<figure><img src="./${f}"><figcaption>${f}</figcaption></figure>`).join("");
@@ -130,6 +153,7 @@ async function writeReport(
 <h1>${escapeHtml(task.name)} <span class="badge">${passed ? "PASS" : "FAIL"}</span></h1>
 <p>Execution <code>${executionId}</code> &middot; ${ms} ms${error ? ` &middot; <b>Error:</b> ${escapeHtml(error)}` : ""}</p>
 ${shots ? `<h2>Screenshots</h2>${shots}` : ""}
+${stepRows ? `<h2>Steps</h2><table><tr><td>#</td><td>Step</td><td>Status</td><td>Duration</td><td>Error</td></tr>${stepRows}</table>` : ""}
 <h2>Log</h2><table>${rows}</table>`;
   fs.writeFileSync(path.join(outputDir, "report.html"), html);
 }

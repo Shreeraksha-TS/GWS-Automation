@@ -12,6 +12,8 @@ export const tasksApi = {
   create: (data: object)             => api.post('/api/tasks', data),
   update: (id: string, data: object) => api.patch(`/api/tasks/${id}`, data),
   delete: (id: string)               => api.delete(`/api/tasks/${id}`),
+  // Parse a script's `Params` type into UI fields (preview before creating).
+  parseParams: (script_content: string) => api.post('/api/tasks/parse-params', { script_content }),
 };
 
 export const executionsApi = {

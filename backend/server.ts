@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { tasksRepo } from "../common/repo.js";
+import { extractScriptParams, toTaskParams } from "../common/scriptParams.js";
 import { config } from "./config.js";
 import { tasks } from "./routes/tasks.js";
 import { executions } from "./routes/executions.js";
@@ -24,12 +25,15 @@ async function seedTasks(): Promise<void> {
     if (!cfg.script_path) continue;
     let scriptSource: string | null = null;
     try { scriptSource = fs.readFileSync(path.join(config.scriptsDir, cfg.script_path), "utf8"); } catch { /* ignore */ }
+    // The script's `Params` type is the source of truth for input fields. Derive them
+    // automatically; fall back to the config's params only if the script declares none.
+    const derived = scriptSource ? toTaskParams(extractScriptParams(scriptSource)) : [];
     await tasksRepo.upsertFromDisk({
       name: cfg.name ?? entry.name,
       description: cfg.description ?? null,
       script_path: cfg.script_path,
       tags: cfg.tags ?? [],
-      params: cfg.params ?? [],
+      params: derived.length ? derived : (cfg.params ?? []),
       script_source: scriptSource,
     });
   }

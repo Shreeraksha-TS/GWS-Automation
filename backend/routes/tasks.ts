@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { tasksRepo } from "../../common/repo.js";
 import { config } from "../config.js";
 import { TaskCreate, TaskUpdate } from "../schemas.js";
+import { extractScriptParams, toTaskParams } from "../../common/scriptParams.js";
 import type { Task, TaskParam } from "../../common/types.js";
 
 export const tasks = Router();
@@ -121,6 +122,14 @@ tasks.get("/:id", wrap(async (req, res) => {
   res.json(t);
 }));
 
+// Preview the input fields a script declares (parsed from its `Params` type), so the
+// UI can show what will be generated before the task is created.
+tasks.post("/parse-params", wrap(async (req, res) => {
+  const source = typeof req.body?.script_content === "string" ? req.body.script_content : "";
+  const detected = extractScriptParams(source);
+  res.json({ detected, fields: toTaskParams(detected) });
+}));
+
 tasks.post("/", wrap(async (req, res) => {
   const p = TaskCreate.parse(req.body);
   if (await tasksRepo.getByScriptPath(p.script_path))
@@ -135,9 +144,16 @@ tasks.post("/", wrap(async (req, res) => {
   try {
     scriptSource = fs.readFileSync(path.join(config.scriptsDir, p.script_path.replace(/\\/g, "/")), "utf8");
   } catch { /* leave null if unreadable */ }
+  // Auto-generate the task's input fields from the script's `Params` type when the
+  // caller didn't supply any. This makes an uploaded script's UI fields appear by itself.
+  let params = p.params;
+  if ((!params || params.length === 0) && scriptSource) {
+    const extracted = toTaskParams(extractScriptParams(scriptSource));
+    if (extracted.length) params = extracted;
+  }
   const t = await tasksRepo.create({
     name: p.name, description: p.description ?? null, script_path: p.script_path,
-    tags: p.tags, params: p.params, script_source: scriptSource,
+    tags: p.tags, params, script_source: scriptSource,
   });
   res.json(t);
 }));

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Play, Trash2, ListChecks, X, Plus, Pencil } from 'lucide-react';
 import { tasksApi } from '../api/client';
 import { shortDateTime } from '../lib/format';
-import type { Task } from '../types';
+import type { Task, TaskParam } from '../types';
 
 export function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -325,6 +325,7 @@ function AddTaskModal({
   const [mode, setMode] = useState<'scaffold' | 'upload'>('scaffold');
   const [scriptContent, setScriptContent] = useState('');
   const [uploadName, setUploadName] = useState('');
+  const [detected, setDetected] = useState<TaskParam[] | null>(null);   // fields parsed from an uploaded script
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -332,7 +333,18 @@ function AddTaskModal({
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadName(file.name);
-    file.text().then((text) => { setScriptContent(text); setError(null); });
+    setDetected(null);
+    file.text().then(async (text) => {
+      setScriptContent(text);
+      setError(null);
+      // Auto-detect the input fields the script declares (its `Params` type).
+      try {
+        const { data } = await tasksApi.parseParams(text);
+        setDetected(data.fields ?? []);
+      } catch {
+        setDetected([]);
+      }
+    });
   }
 
   async function add() {
@@ -353,7 +365,8 @@ function AddTaskModal({
         description: description.trim() || null,
         script_path: trimmedPath,
         tags,
-        params: [],   // set parameters later via Edit Task
+        // Use fields auto-detected from the uploaded script; otherwise none (set later via Edit Task).
+        params: mode === 'upload' && detected ? detected : [],
         ...(mode === 'upload' ? { script_content: scriptContent } : {}),
       });
       onAdded(trimmedName);
@@ -420,7 +433,7 @@ function AddTaskModal({
                 <button
                   key={m}
                   type="button"
-                  onClick={() => { setMode(m); setError(null); }}
+                  onClick={() => { setMode(m); setError(null); setDetected(null); }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
                     mode === m ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
@@ -437,6 +450,30 @@ function AddTaskModal({
               <div>
                 <input type="file" accept=".ts" onChange={onFile} className="text-xs text-slate-600" />
                 {uploadName && <p className="text-xs text-green-600 mt-1">Loaded {uploadName} ({scriptContent.length} chars)</p>}
+                {detected && (
+                  detected.length ? (
+                    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                      <p className="text-xs font-medium text-slate-600 mb-1">
+                        Detected input fields (from <code>Params</code>):
+                      </p>
+                      <ul className="space-y-0.5">
+                        {detected.map((f) => (
+                          <li key={f.name} className="text-xs text-slate-600 font-mono flex items-center gap-2">
+                            <span className="text-indigo-700">{f.name}</span>
+                            <span className="text-slate-400">{f.type}</span>
+                            {f.required
+                              ? <span className="text-red-500">required</span>
+                              : <span className="text-slate-400">optional</span>}
+                            {f.default !== undefined && <span className="text-slate-400">= {f.default}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-[11px] text-slate-400 mt-1">These become the Run/Schedule form fields. Adjust later via Edit Task.</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-1">No <code>Params</code> fields detected — you can add them later via Edit Task.</p>
+                  )
+                )}
               </div>
             )}
           </div>

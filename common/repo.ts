@@ -470,6 +470,50 @@ export const artifactsRepo = {
   },
 };
 
+/* ============================= steps ================================== */
+
+export const stepsRepo = {
+  // Record one step's outcome and timing (id is an IDENTITY column, so it's omitted).
+  async add(
+    executionId: string,
+    seq: number,
+    name: string,
+    status: "PASSED" | "FAILED",
+    startedAt: string | null,
+    finishedAt: string | null,
+    durationMs: number | null,
+    errorMessage: string | null = null,
+  ): Promise<void> {
+    const pool = await getPool();
+    await pool.request()
+      .input("execution_id", sql.UniqueIdentifier, executionId)
+      .input("seq", sql.Int, seq)
+      .input("name", sql.NVarChar(256), name)
+      .input("status", sql.VarChar(12), status)
+      .input("started_at", sql.DateTimeOffset, startedAt ? new Date(startedAt) : null)
+      .input("finished_at", sql.DateTimeOffset, finishedAt ? new Date(finishedAt) : null)
+      .input("duration_ms", sql.Int, durationMs)
+      .input("error_message", sql.NVarChar(sql.MAX), errorMessage)
+      .query(`INSERT INTO dbo.execution_steps
+                (execution_id, seq, name, status, started_at, finished_at, duration_ms, error_message)
+              VALUES (@execution_id, @seq, @name, @status, @started_at, @finished_at, @duration_ms, @error_message);`);
+  },
+
+  async list(executionId: string): Promise<Array<{
+    seq: number; name: string; status: string; duration_ms: number | null; error_message: string | null;
+  }>> {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input("id", sql.UniqueIdentifier, executionId)
+      .query(`SELECT seq, name, status, duration_ms, error_message
+              FROM dbo.execution_steps WHERE execution_id = @id ORDER BY seq;`);
+    return r.recordset.map((x) => ({
+      seq: x.seq, name: x.name, status: x.status,
+      duration_ms: x.duration_ms, error_message: x.error_message,
+    }));
+  },
+};
+
 /* ============================= logs =================================== */
 
 export const logsRepo = {
